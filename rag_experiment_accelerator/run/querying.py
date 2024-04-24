@@ -475,8 +475,6 @@ def query_and_eval_single_line(
 
             if guardrails_enabled:
                 max_rougeL, guardrails_answer = run_guardrails(openai_response, prompt_instruction_context, guardrails_threshold)
-                if user_prompt == "Where can additional compatibility details for the Surface Slim Pen 2 be found?":
-                    logger.error(f"max_rougeL -> {max_rougeL} -> {openai_response} -> {full_prompt_instruction}")
 
             output = QueryOutput(
                 rerank=config.RERANK,
