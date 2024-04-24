@@ -1,5 +1,5 @@
 {
-    "workspace_name": "",
-    "resource_group": "",
-    "subscription_id": ""
+    "workspace_name": "aml-unicredit",
+    "resource_group": "UniCredit",
+    "subscription_id": "cab19862-c7e9-4061-9982-83ae506ac025"
 }

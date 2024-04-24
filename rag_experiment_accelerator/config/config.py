@@ -66,6 +66,8 @@ class Config:
         HYDE (str): Whether or not to generate hypothetical answer or document which holds an answer for the query using LLM. Possible values are "disabled", "generated_hypothetical_answer", "generated_hypothetical_document_to_answer". Default is 'disabled'.
         QUERY_EXPANSION (bool): Whether or not to perform query expansion and generate up to five related questions using LLM (depends on similairy score) and use those to retrieve documents. Default is False.
         MIN_QUERY_EXPANSION_RELATED_QUESTION_SIMILARITY_SCORE (int): The minimum similarity score for query expansion generated related questions. Default is 90.
+        GUARDRAILS_ENABLED (bool): Whether or not to include guardrails.
+        GUARDRAILS_THRESHOLD (float): The threshold for guardrails using LLM.
     """
 
     def __init__(
@@ -171,6 +173,11 @@ class Config:
         self.validate_semantic_search_config(
             environment.azure_search_use_semantic_search.lower() == "true"
         )
+        self.GUARDRAILS_ENABLED = config_json.get("guardrails_enabled", False)
+        self.GUARDRAILS_THRESHOLD = config_json.get(
+            "guardrails_threshold", 0.1
+        )
+
 
     def validate_inputs(self, chunk_size, overlap_size, ef_constructions, ef_searches):
         if any(val < 100 or val > 1000 for val in ef_constructions):
