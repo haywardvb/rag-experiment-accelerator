@@ -382,6 +382,7 @@ def query_and_eval_single_line(
     evaluator: SpacyEvaluator,
     question_count: int,
     guardrails_enabled: bool,
+    guardrails_type: string,
     guardrails_threshold: float,
 ):
     logger.info(f"Processing question {line_number + 1} out of {question_count}\n\n")
@@ -468,13 +469,15 @@ def query_and_eval_single_line(
             openai_response = response_generator.generate_response(
                 full_prompt_instruction,
                 user_prompt,
+                guardrails_enabled,
+                guardrails_type
             )
 
             max_rougeL = None
             guardrails_answer = openai_response    
 
             if guardrails_enabled:
-                max_rougeL, guardrails_answer = run_guardrails(openai_response, prompt_instruction_context, guardrails_threshold)
+                max_rougeL, guardrails_answer = run_basic_guardrails(openai_response, prompt_instruction_context, guardrails_threshold)
 
             output = QueryOutput(
                 rerank=config.RERANK,
@@ -505,7 +508,7 @@ def query_and_eval_single_line(
         )
 
 
-def run_guardrails(openai_response: str, search_results: list[str], guardrails_threshold: float):
+def run_basic_guardrails(openai_response: str, search_results: list[str], guardrails_threshold: float):
     """For guardrail, we invalidate an answer if the word overlap between the top m results and the generated answer falls below the specified threshold.
     Args:
         openai_response (str): LLM Response.
@@ -618,6 +621,7 @@ def run(environment: Environment, config: Config, index_config: IndexConfig):
                         evaluator,
                         question_count,
                         config.GUARDRAILS_ENABLED,
+                        config.GUARDRAILS_TYPE,
                         config.GUARDRAILS_THRESHOLD,
                     ): line
                     for line_number, line in enumerate(file)

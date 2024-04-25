@@ -1,5 +1,6 @@
 import logging
 
+from nemoguardrails import RailsConfig, LLMRails
 from openai import AzureOpenAI
 from tenacity import (
     after_log,
@@ -31,13 +32,19 @@ class ResponseGenerator:
             api_version=environment.openai_api_version,
         )
 
-    def generate_response(self, sys_message, prompt) -> str:
+    def generate_response(self,
+                          sys_message,
+                          prompt,
+                          guardrails_enabled,
+                          guardrails_type) -> str:
         """
         Generates a response to a given prompt using the OpenAI Chat API.
 
         Args:
             sys_message (str): The system message to include in the prompt.
             prompt (str): The user's prompt to generate a response to.
+            guardrails_enabled (bool): Value indicating if guardrails are enabled.
+            guardrails_type(str): if guardrails required are Nemo or basic.
 
         Returns:
             str: The generated response to the user's prompt.
@@ -48,11 +55,18 @@ class ResponseGenerator:
             {"role": "user", "content": prompt},
         ]
 
-        response = self._create_chat_completion_with_retry(
-            model=self.deployment_name,
-            messages=messages,
-            temperature=self.temperature,
-        )
+        if guardrails_enabled and guardrails_type == "nemo":
+            # Load configuration for Nemo guardrails
+            config = RailsConfig.from_path("./config")
+            # Configuration of LLMs is passed
+            guardrails_app = LLMRails(config=config, llm=self.client)
+            response = guardrails_app.generate(messages=messages)
+        else:
+            response = self._create_chat_completion_with_retry(
+                model=self.deployment_name,
+                messages=messages,
+                temperature=self.temperature,
+            )
 
         # TODO: It is possible that this will return None.
         #       We need to ensure that this is handled properly in the places where this function gets called.

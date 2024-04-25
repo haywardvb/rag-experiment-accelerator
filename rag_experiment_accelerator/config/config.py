@@ -67,6 +67,7 @@ class Config:
         QUERY_EXPANSION (bool): Whether or not to perform query expansion and generate up to five related questions using LLM (depends on similairy score) and use those to retrieve documents. Default is False.
         MIN_QUERY_EXPANSION_RELATED_QUESTION_SIMILARITY_SCORE (int): The minimum similarity score for query expansion generated related questions. Default is 90.
         GUARDRAILS_ENABLED (bool): Whether or not to include guardrails.
+        GUARDRAILS_TYPE(str): Type of guardrails basic or nemo.
         GUARDRAILS_THRESHOLD (float): The threshold for guardrails using LLM.
     """
 
@@ -174,6 +175,7 @@ class Config:
             environment.azure_search_use_semantic_search.lower() == "true"
         )
         self.GUARDRAILS_ENABLED = config_json.get("guardrails_enabled", False)
+        self.GUARDRAILS_TYPE = config_json.get("guardrails_type", "basic")
         self.GUARDRAILS_THRESHOLD = config_json.get(
             "guardrails_threshold", 0.1
         )

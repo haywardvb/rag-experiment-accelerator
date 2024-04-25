@@ -1,0 +1,13 @@
+define user ask off topic
+  "How's the weather today?"
+  "Can you recommend a good restaurant nearby?"
+  "What's your opinion on the latest political news?"
+  "How do I cook spaghetti?"
+  "What are the best tourist attractions in Paris?"
+
+define bot explain cant off topic
+  "I cannot answer to your question because I'm programmed to assist only with insurance-related questions."
+
+define flow
+  user ask off topic
+  bot explain cant off topic
