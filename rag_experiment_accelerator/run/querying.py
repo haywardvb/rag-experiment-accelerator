@@ -1,6 +1,8 @@
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import ExitStack
 import json
+import re
+from rouge_score import rouge_scorer
 
 from azure.search.documents import SearchClient
 from dotenv import load_dotenv
@@ -379,6 +381,8 @@ def query_and_eval_single_line(
     search_client: SearchClient,
     evaluator: SpacyEvaluator,
     question_count: int,
+    guardrails_enabled: bool,
+    guardrails_threshold: float,
 ):
     logger.info(f"Processing question {line_number + 1} out of {question_count}\n\n")
     data = json.loads(line)
@@ -442,6 +446,8 @@ def query_and_eval_single_line(
                     evaluation_content=evaluation_content,
                     retrieve_num_of_documents=config.RETRIEVE_NUM_OF_DOCUMENTS,
                     evaluator=evaluator,
+                    config=config,
+                    response_generator=response_generator,
                 )
                 search_evals.append(evaluation)
             if config.RERANK and len(docs) > 0:
@@ -457,13 +463,18 @@ def query_and_eval_single_line(
             full_prompt_instruction = (
                 config.MAIN_PROMPT_INSTRUCTION
                 + "\n"
-                + "\n".join(prompt_instruction_context)
+                + "\n".join([f"doc{index}={content}" for index, content in enumerate(prompt_instruction_context)])
             )
             openai_response = response_generator.generate_response(
                 full_prompt_instruction,
                 user_prompt,
             )
-            logger.debug(openai_response)
+
+            max_rougeL = None
+            guardrails_answer = openai_response    
+
+            if guardrails_enabled:
+                max_rougeL, guardrails_answer = run_guardrails(openai_response, prompt_instruction_context, guardrails_threshold)
 
             output = QueryOutput(
                 rerank=config.RERANK,
@@ -473,12 +484,13 @@ def query_and_eval_single_line(
                 retrieve_num_of_documents=config.RETRIEVE_NUM_OF_DOCUMENTS,
                 crossencoder_at_k=config.CROSSENCODER_AT_K,
                 question_count=question_count,
-                actual=openai_response,
+                actual=guardrails_answer,
                 expected=output_prompt,
                 search_type=s_v,
                 search_evals=search_evals,
                 context=qna_context,
                 question=user_prompt,
+                guardrails=max_rougeL
             )
             handler.save(
                 index_name=index_config.index_name(),
@@ -491,6 +503,67 @@ def query_and_eval_single_line(
             "Invalid request. Skipping question: {user_prompt}",
             exc_info=e,
         )
+
+
+def run_guardrails(openai_response: str, search_results: list[str], guardrails_threshold: float):
+    """For guardrail, we invalidate an answer if the word overlap between the top m results and the generated answer falls below the specified threshold.
+    Args:
+        openai_response (str): LLM Response.
+        search_results (list): List of retrieved documents by a search index.
+        guardrails_threshold (float): threshold value for word overlap guardrail. If the word
+        overlap falls below the threshold, we do not output the generated answer
+
+    Returns:
+        (max_rougeL, answer): Formatted output as defined above
+    """
+    
+    citations = []
+    matches = list(set(re.findall("doc[0-9]+", openai_response)))
+        
+    max_rougeL = None
+    answer = "I dont know."
+    if matches:
+        for key in matches:
+            id = int(key.replace("doc", ""))
+            citations.append(search_results[id])
+
+        if citations:
+            # compute word overlap
+            max_rougeL = compute_word_overlap(
+                openai_response, citations
+            )
+
+            # Set answer = openai_response when rougeL > guardrails_threshold
+            if max_rougeL > guardrails_threshold or len(openai_response.split())<=15:
+                answer = openai_response
+                
+    return max_rougeL, answer
+
+
+
+def compute_word_overlap(answer: str, docs: list):
+    """Computes word overlap (rougeL), longest-common-subsequence stats between the answer and the top m documents in the document list, for consistency guardrail.
+    ROUGE-L ranges between 0 and 1, with higher scores indicating higher similarity.
+
+    Args:
+        answer (str): LLM generated response
+        docs (list): List of top results from the search index (with title, chunk_content and source fields)
+
+    Returns:
+        max_rougeL: the max rougeL score achieved by the answer.
+    """
+    # Stemmer is disabled since it's unclear whether Italian is supported
+    scorer = rouge_scorer.RougeScorer(["rouge1", "rouge2", "rougeL"], use_stemmer=False)
+    summary_rougeL = []
+    answer = answer.lower()
+
+    for chunk_content in docs:
+        scores = scorer.score(chunk_content, answer)
+        rougeL = scores["rougeL"].fmeasure
+        summary_rougeL.append(rougeL)
+
+    summary_rougeL = sorted(summary_rougeL, reverse=True)
+    return summary_rougeL[0]
 
 
 def run(environment: Environment, config: Config, index_config: IndexConfig):
@@ -544,6 +617,8 @@ def run(environment: Environment, config: Config, index_config: IndexConfig):
                         search_client,
                         evaluator,
                         question_count,
+                        config.GUARDRAILS_ENABLED,
+                        config.GUARDRAILS_THRESHOLD,
                     ): line
                     for line_number, line in enumerate(file)
                 }
@@ -553,7 +628,7 @@ def run(environment: Environment, config: Config, index_config: IndexConfig):
                         future.result()
                     except Exception as exc:
                         logger.error(
-                            f"query generated an exception: {exc} for line {line}..."
+                            f"query generated an exception: {exc} for line {line}...", exc_info=exc
                         )
 
         search_client.close()

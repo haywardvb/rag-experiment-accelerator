@@ -16,6 +16,7 @@ class QueryOutput:
         search_evals (list): The evaluations for search.
         context (str): The context of the query.
         question (str): The question of the query.
+        guardrails (float): RougeL score.
     """
 
     def __init__(
@@ -33,6 +34,7 @@ class QueryOutput:
         search_evals: list,
         context: str,
         question: str,
+        guardrails: float,
     ):
         self.rerank = rerank
         self.rerank_type = rerank_type
@@ -47,3 +49,4 @@ class QueryOutput:
         self.search_evals = search_evals
         self.context = context
         self.question = question
+        self.guardrails = guardrails
